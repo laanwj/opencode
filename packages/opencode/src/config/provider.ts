@@ -55,6 +55,7 @@ export const Model = Schema.Struct({
   ),
   options: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
   headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  prompt: Schema.optional(Schema.String).annotate({ description: "Custom system prompt for this model" }),
   variants: Schema.optional(
     Schema.Record(
       Schema.String,
