@@ -593,6 +593,10 @@ const layer: Layer.Layer<
       return rows.map((row) => ({ ...fromRow(row), project: projects.get(row.project_id) ?? null }))
     })
 
+    const svcListGlobal = Effect.fn("Session.listGlobal")((input?: Parameters<typeof listGlobal>[0]) =>
+      Effect.sync(() => Array.from(listGlobal(input))),
+    )
+
     const children = Effect.fn("Session.children")(function* (parentID: SessionID) {
       const rows = yield* db
         .select()

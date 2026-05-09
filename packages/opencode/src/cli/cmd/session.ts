@@ -82,36 +82,29 @@ export const SessionListCommand = effectCmd({
         type: "string",
         choices: ["table", "json"],
         default: "table",
+      })
+      .option("global", {
+        alias: "g",
+        describe: "show sessions from all projects",
+        type: "boolean",
+        default: false,
       }),
   handler: Effect.fn("Cli.session.list")(function* (args) {
+    if (args.global) {
+      const sessions = yield* Session.Service.use((svc) => svc.listGlobal({ roots: true, limit: args.maxCount }))
+      if (sessions.length === 0) return
+      const output = args.format === "json" ? formatGlobalSessionJSON(sessions) : formatGlobalSessionTable(sessions)
+      yield* writeOutput(output, args)
+      return
+    }
+
     const sessions = yield* Session.Service.use((svc) => svc.list({ roots: true, limit: args.maxCount }))
 
     if (sessions.length === 0) return
 
     const output = args.format === "json" ? formatSessionJSON(sessions) : formatSessionTable(sessions)
 
-    const shouldPaginate = process.stdout.isTTY && !args.maxCount && args.format === "table"
-
-    if (shouldPaginate) {
-      yield* Effect.promise(async () => {
-        const proc = Process.spawn(pagerCmd(), {
-          stdin: "pipe",
-          stdout: "inherit",
-          stderr: "inherit",
-        })
-
-        if (!proc.stdin) {
-          console.log(output)
-          return
-        }
-
-        proc.stdin.write(output)
-        proc.stdin.end()
-        await proc.exited
-      })
-    } else {
-      console.log(output)
-    }
+    yield* writeOutput(output, args)
   }),
 })
 
@@ -144,4 +137,62 @@ function formatSessionJSON(sessions: Session.Info[]): string {
     directory: session.directory,
   }))
   return JSON.stringify(jsonData, null, 2)
+}
+
+function formatGlobalSessionTable(sessions: Session.GlobalInfo[]): string {
+  const lines: string[] = []
+
+  const maxIdWidth = Math.max(20, ...sessions.map((s) => s.id.length))
+  const maxTitleWidth = Math.max(25, ...sessions.map((s) => s.title.length))
+  const maxProjectWidth = Math.max(7, ...sessions.map((s) => (s.project?.name ?? s.project?.id ?? "unknown").length))
+
+  const header = `Session ID${" ".repeat(maxIdWidth - 10)}  Title${" ".repeat(maxTitleWidth - 5)}  Project${" ".repeat(maxProjectWidth - 7)}  Updated`
+  lines.push(header)
+  lines.push("─".repeat(header.length))
+  for (const session of sessions) {
+    const truncatedTitle = Locale.truncate(session.title, maxTitleWidth)
+    const projectLabel = session.project?.name ?? session.project?.id ?? "unknown"
+    const timeStr = Locale.todayTimeOrDateTime(session.time.updated)
+    lines.push(`${session.id.padEnd(maxIdWidth)}  ${truncatedTitle.padEnd(maxTitleWidth)}  ${projectLabel.padEnd(maxProjectWidth)}  ${timeStr}`)
+  }
+
+  return lines.join(EOL)
+}
+
+function formatGlobalSessionJSON(sessions: Session.GlobalInfo[]): string {
+  const jsonData = sessions.map((session) => ({
+    id: session.id,
+    title: session.title,
+    updated: session.time.updated,
+    created: session.time.created,
+    projectId: session.projectID,
+    project: session.project,
+    directory: session.directory,
+  }))
+  return JSON.stringify(jsonData, null, 2)
+}
+
+function* writeOutput(output: string, args: { maxCount?: number; format: string }) {
+  const shouldPaginate = process.stdout.isTTY && !args.maxCount && args.format === "table"
+
+  if (shouldPaginate) {
+    yield* Effect.promise(async () => {
+      const proc = Process.spawn(pagerCmd(), {
+        stdin: "pipe",
+        stdout: "inherit",
+        stderr: "inherit",
+      })
+
+      if (!proc.stdin) {
+        console.log(output)
+        return
+      }
+
+      proc.stdin.write(output)
+      proc.stdin.end()
+      await proc.exited
+    })
+  } else {
+    console.log(output)
+  }
 }
