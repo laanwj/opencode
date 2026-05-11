@@ -88,6 +88,11 @@ export const SessionListCommand = effectCmd({
         describe: "show sessions from all projects",
         type: "boolean",
         default: false,
+      })
+      .option("pager", {
+        describe: "use pager for table output",
+        type: "boolean",
+        default: true,
       }),
   handler: Effect.fn("Cli.session.list")(function* (args) {
     if (args.global) {
@@ -172,8 +177,8 @@ function formatGlobalSessionJSON(sessions: Session.GlobalInfo[]): string {
   return JSON.stringify(jsonData, null, 2)
 }
 
-function* writeOutput(output: string, args: { maxCount?: number; format: string }) {
-  const shouldPaginate = process.stdout.isTTY && !args.maxCount && args.format === "table"
+function* writeOutput(output: string, args: { maxCount?: number; format: string; pager?: boolean }) {
+  const shouldPaginate = args.pager !== false && process.stdout.isTTY && !args.maxCount && args.format === "table"
 
   if (shouldPaginate) {
     yield* Effect.promise(async () => {
